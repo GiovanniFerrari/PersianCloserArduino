@@ -1,0 +1,82 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows}
+
+\begin{document}
+Ogni 8 secondi arduino si sveglia. Ogni quattro risvegli arduino accende il ble per 1 secondo. Viene controllato se il dispositivo ble e' connesso oppure no. Se e' connesso rimane in ascolto per eventuali messaggi per i successivi 2 secondi. Se non ci sono messaggi, arduino torna a dormire. Se arriva un nuovo messaggio questo viene parsato. Se Il parsing ha successo, si passa alla fase successiva altrimenti arduino risponde con un errore e aspetta per altri 2 secondi un nuovo messaggio, dopo di che torna a dormire. I comandi possibili sono 3: ``up,down,stop''. Nel caso di ``up e down'' i corrispettivi attuatori vengono attivati per un tempo non superiore ai 27 secondi. Se durante il tempo di attivazione arriva un nuovo messaggio con parsing positivo tutti gli attuatori devono essere interrotti e si procede ad applicare l'attuatore successivo. In seguito a un comando di stop Arduino rimane attivo per i successivi 10 secondi. Deve essere prevedibile un comando di test, per il quale arduino non va in sleep mode per un tempo fissato. Questo per permettere delle dimostrazioni con la tecnologia utilizzata.
+
+
+
+% Define block styles
+\tikzstyle{decision} = [diamond, draw, fill=blue!20, 
+    text width=4.5em, text badly centered, node distance=3cm, inner sep=0pt]
+\tikzstyle{block} = [rectangle, draw, fill=blue!20, 
+    text width=5em, text centered, rounded corners, minimum height=4em]
+\tikzstyle{line} = [draw, -latex']
+\tikzstyle{cloud} = [draw, ellipse,fill=red!20, node distance=3cm,
+    minimum height=2em]
+    
+\begin{tikzpicture}[node distance = 2cm, auto]
+    % Place nodes
+    
+    \node [block](init){start};
+    \node [cloud, left of=init](initSleep){sleep = 0};
+    \node [decision, below of = init,node distance=2.5cm] (decide){sleep = 4 ?};
+    \node [block, right of =decide, node distance=4cm](sleep++) {increase sleep};
+    \node [block, right of= sleep++, node distance=3cm](sleep){sleep};
+    \node [block, below of = decide,node distance=2.5cm](BLEon){activate BLE};
+    \node [decision, below of =BLEon, node distance=2cm](connectDecision){connected?};
+    \node [decision, below of =connectDecision,node distance=2.5cm](waitForConnection){2s last?};
+    \node [decision, right of = waitForConnection](newMessageDecision){new message?};
+    \node [block, below of = newMessageDecision, node distance=2.2cm](parseMessage){parsingMessage};
+    \node [decision, below of = parseMessage,node distance=2.2cm](correctMessage){is correct?};
+    \node [block, below of = waitForConnection, node distance=2.2cm](printError){printError};
+    \node [block, below of = correctMessage](activateActuator){Activate actuator};
+    \node [decision, below of = activateActuator,node distance=2.2cm](newMessage){new message?};
+    \node [decision, below of = newMessage, node distance=3.5cm](actuatorDuration){Passati 27s};
+    \node [block, left of = actuatorDuration, node distance=3cm](waitNewMessage){wait 5 seconds};
+    \node [decision, right of = newMessage](correctMessageBis){is correct?};
+     \node [decision, below of = correctMessageBis, node distance=2.3cm](printErrorBis){printError};
+    \node [decision, right of = correctMessageBis](differentMessage){different from the last one?};
+    \node [block, above of = differentMessage, node distance=3.2cm](stopActuators){stopActuators};
+%    \node [block, below of=decide, node distance=3cm] (stop) {stop};
+    % Draw edges
+    \path [line](init) -- (decide);
+    \path [line](initSleep) -- (init);
+    \path [line] (decide) -- node [near start] {no} (sleep++);
+    \path [line](sleep++) -- (sleep);
+    \path [line](sleep) |- (init);
+    \path [line](decide) -- node [near start] {yes} (BLEon);
+    \path [line](BLEon) -- (connectDecision);
+    \path [line](connectDecision) -| node [near start] {yes} (newMessageDecision);
+    \path [line](newMessageDecision) -- node [near start] {no} (waitForConnection);
+    \path [line](waitForConnection) -| node [near start] {yes} (initSleep);
+    \path [line](waitForConnection) -- (connectDecision);
+    \path [line](newMessageDecision) -- (parseMessage);
+    \path [line](parseMessage) -- (correctMessage);
+    \path [line](printError) -- (waitForConnection);
+    \path [line](correctMessage) -| (printError);
+    \path [line](correctMessage) -- (activateActuator);
+    \path [line](activateActuator) -- (newMessage);
+    \path [line](newMessage) -- (correctMessageBis);
+    \path [line](correctMessageBis) -- (differentMessage);
+    \path [line](differentMessage) -- (stopActuators);
+    \path [line](correctMessageBis) -- (printErrorBis);
+    \path [line](printErrorBis) |- (actuatorDuration);
+    \path [line](differentMessage) |- (actuatorDuration);
+    \path [line](newMessage) -- (actuatorDuration);
+    \path [line](actuatorDuration) -- (waitNewMessage);
+    \path [line](waitNewMessage) -| (initSleep);
+    \path [line](stopActuators) -| (initSleep);
+    
+%    \path [line] (evaluate) -- (decide);
+%    \path [line] (decide) -| node [near start] {yes} (update);
+%    \path [line] (update) |- (identify);
+%    \path [line] (decide) -- node {no}(stop);
+%    \path [line,dashed] (expert) -- (init);
+%    \path [line,dashed] (system) -- (init);
+%    \path [line,dashed] (system) |- (evaluate);
+\end{tikzpicture}
+
+\end{document}
+
