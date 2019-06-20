@@ -10,6 +10,7 @@
 #define actuatorUP 9
 #define actuatorDOWN 10
 #define test true
+#define persian_duration 27000
 
 SoftwareSerial ble(6, 5);
 
@@ -34,7 +35,7 @@ struct sleepStateMachine
 
     void sleep()
     {
-      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+      LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF);
     };
 };
 
@@ -71,25 +72,77 @@ String readFromBLE()
   return response;
 }
 
-void setUpActuators()
+struct MessageParser
 {
+  private:
 
-  pinMode(actuatorUP, OUTPUT);
-  pinMode(actuatorDOWN, OUTPUT);
-  digitalWrite(actuatorUP, LOW);
-  digitalWrite(actuatorDOWN, LOW);
+  String message;
+  String parsedMessage;
+  bool parsable = false;
 
-}
+  public:
 
-void dismissActuators()
-{
+  String getMessage()
+  {
+    return message;
+    };
+  
+  void setMessage(String m)
+  {
+    message = m;
+    parseMessage();
+    };
+  
+  boolean isParsable() {return parsable;}
+  
+  String getParsedMessage(){return parsedMessage;}
+  
+  String parseMessage()
+  {
+    
+    if(message == "")
+    {
+      parsedMessage = "Error";
+      } 
+    else
+    {
+      if(message == "up")
+      {
+        parsedMessage = "up";
+        parsable = "true";
+        }
+        else if(message == "down")
+        {
+          parsedMessage = "down";
+          parsable = "true";
+          } 
+          else if(message == "stop")
+          {
+            parsedMessage = "stop";
+            parsable = "true";
+            } 
+            else
+            {
+              parsedMessage = "Error";
+              parsable = "false";
+              }
+      }
 
-  digitalWrite(actuatorUP, LOW);
-  digitalWrite(actuatorDOWN, LOW);
-  pinMode(actuatorUP, INPUT);
-  pinMode(actuatorDOWN, INPUT);
+      return parsedMessage;
+    }
+      
+  void cleanParsedMessage()
+  {
+    message = "";
+    parsedMessage = "";
+    parsable = false;
+    }
+    
+  };
 
-}
+
+///////////////// Actuators
+
 
 void activateActuator(int actuator)
 {
@@ -101,7 +154,61 @@ void deActivateActuator(int actuator)
   digitalWrite(actuator, LOW);
 }
 
+
+struct Actuators
+{
+  boolean actuatorsActive = false;
+  String actuatorsState = "stop";
+
+  void setActuator(String newState)
+  {
+    if(newState == "stop")
+    {
+      dismissActuators();
+      actuatorsState = "stop";
+      }
+      else if (newState == "up" && actuatorsState != "up")
+      {
+        setUpActuators();
+        activateActuator(actuatorUP);
+        actuatorsState = "up";
+        }
+        else if (newState == "down" && actuatorsState != "down")
+        {
+          setUpActuators();
+          activateActuator(actuatorDOWN);
+          actuatorsState = "down";
+          }
+    }
+
+  void setUpActuators()
+  {
+
+    pinMode(actuatorUP, OUTPUT);
+    pinMode(actuatorDOWN, OUTPUT);
+    digitalWrite(actuatorUP, LOW);
+    digitalWrite(actuatorDOWN, LOW);
+
+  }
+
+  void dismissActuators()
+  {
+
+    digitalWrite(actuatorUP, LOW);
+    digitalWrite(actuatorDOWN, LOW);
+    pinMode(actuatorUP, INPUT);
+    pinMode(actuatorDOWN, INPUT);
+    actuatorsState = "stop";
+  }
+};
+
+////////////////////Structs instances
+
 struct sleepStateMachine sleepSM;
+struct MessageParser messageParser;
+struct Actuators persianActuator;
+
+////////////////////SET UP
 
 void setup() {
 
@@ -110,6 +217,8 @@ void setup() {
   }
 
 }
+
+////////////////////LOOP
 
 void loop()
 {
@@ -145,17 +254,75 @@ void loop()
     setUpBLE();
     unsigned long timeBLEUp = millis();
 
-    while ((millis() - timeBLEUp) < 1000)
+    while ((millis() - timeBLEUp) < 3000)
     {
       if (ble.available() > 0) {
 
         delay(200); // Let message to fully arrive to ble
-        String messageFromBLE = readFromBLE();
+  
+        messageParser.setMessage(readFromBLE());
 
         if (test)
         {
-          Serial.println("Received from BLE: " + messageFromBLE);
+          Serial.println("Message is Parsable?: " + messageParser.isParsable());
+          Serial.println("Message is: " + messageParser.getMessage());
+          Serial.println("Message parsed is: " + messageParser.getParsedMessage());
+          delay(100);
         }
+
+        if(messageParser.isParsable())
+        {
+          ble.write("Ok");
+          String newStateActuator = messageParser.getParsedMessage();
+          persianActuator.setActuator(newStateActuator);          
+          messageParser.cleanParsedMessage();
+
+          unsigned long timeActuatorUp = millis();
+
+          while(( millis() - timeActuatorUp ) < persian_duration){
+
+            if (ble.available() > 0) {
+                delay(200); // Let message to fully arrive to ble      
+                messageParser.setMessage(readFromBLE());
+                if(messageParser.isParsable())
+                {
+                  ble.write("Ok");
+
+                  String newStateActuator = messageParser.getParsedMessage();
+  
+                  if (test)
+                  {
+                    Serial.println("Message while actuating is Parsable?: " + (String)messageParser.isParsable());
+                    Serial.println("Message while actuating is Parsable is: " + messageParser.getMessage());
+                    Serial.println("Message while actuating is Parsable parsed is: " + messageParser.getParsedMessage());
+                    delay(100);
+                  }
+                  
+                  persianActuator.setActuator(newStateActuator);
+                  if(newStateActuator == "stop")
+                  {
+                    timeActuatorUp = millis()-23000; // if the message is stop, wait for other 5 seconds for a new message
+                    }
+                    else
+                    {
+                      timeActuatorUp = millis();
+                      }
+                  messageParser.cleanParsedMessage();
+                }
+                else
+                {
+                  ble.write("Error");
+                  messageParser.cleanParsedMessage();
+                  }
+              } 
+             }
+             persianActuator.dismissActuators();
+          }
+          else
+          {
+            ble.write("Error");
+            messageParser.cleanParsedMessage();
+            }
       }
     }
 
